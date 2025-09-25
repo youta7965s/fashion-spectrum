@@ -1,0 +1,15 @@
+# Pythonの__pycache__フォルダを無視
+__pycache__/
+
+# データファイルとモデル
+features.pt
+images.pkl
+
+# OSの一時ファイル
+.DS_Store
+
+# ログファイル
+*.log
+
+# IDEの設定ファイル（例：VS Code）
+.vscode/
