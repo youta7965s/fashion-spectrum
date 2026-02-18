@@ -1,15 +1,20 @@
-# Pythonの__pycache__フォルダを無視
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# データファイルとモデル
-features.pt
-images.pkl
+.venv/
+venv/
+env/
 
-# OSの一時ファイル
-.DS_Store
+.ipynb_checkpoints/
 
-# ログファイル
-*.log
-
-# IDEの設定ファイル（例：VS Code）
 .vscode/
+.idea/
+
+.streamlit/
+
+.cache/
+
+.DS_Store
+Thumbs.db
