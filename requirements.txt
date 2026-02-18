@@ -1,0 +1,6 @@
+streamlit
+Pillow
+torch
+transformers
+datasets
+tqdm
