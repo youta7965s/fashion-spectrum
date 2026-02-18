@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoProcessor, AutoModel
 
-st.set_page_config(layout="centered", page_title="Fashion Image Analysis", page_icon="👗")
+st.set_page_config(layout="centered", page_title="Fashion Spectrum", page_icon="👗")
 
 # --- 1. モデルとデータの読み込み ---
 # Streamlitのキャッシュ機能を使って、アプリケーションの実行中に一度だけリソースを読み込みます。
@@ -118,7 +118,7 @@ def main():
     """
     Streamlitアプリケーションのメイン関数。UIの構築と処理の流れを定義します。
     """
-    st.title("Fashion Image Analysis App")
+    st.title("Fashion Style Spectrum")
     st.write("Decompose outfit images into attributes such as style, color, and silhouette.")
 
     uploaded_files = st.file_uploader(
