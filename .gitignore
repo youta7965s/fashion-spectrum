@@ -6,11 +6,15 @@ __pycache__/
 .venv/
 venv/
 env/
+.venv-exp/
 
 .ipynb_checkpoints/
 
 .vscode/
 .idea/
+
+experiments/
+notebooks/
 
 .streamlit/
 

@@ -3,6 +3,8 @@ from PIL import Image, ImageOps
 import torch
 import torch.nn.functional as F
 from transformers import AutoProcessor, AutoModel
+import numpy as np
+import plotly.graph_objects as go
 
 st.set_page_config(layout="centered", page_title="Fashion Spectrum", page_icon="👗")
 
@@ -29,10 +31,7 @@ def load_resources():
     # UI表示も英語に統一するため、カテゴリ名は英語に変更
     style_categories = {
         "Style": ["streetwear", "vintage", "modern", "sporty", "elegant", "preppy", "minimalist", "punk", "gothic", "hippie", "grunge"],
-        "Color": ["red", "blue", "green", "yellow", "black", "white", "pink", "purple", "orange", "brown", "gray"],
-        "Tone": ["vivid color", "monochrome color", "pastel color", "dark tone"],
-        "Silhouette": ["A-line silhouette", "I-line silhouette", "H-line silhouette", "O-line silhouette"],
-        "Fit": ["oversized fit", "slim fit"],
+        "Color": ["red", "blue", "green", "yellow", "black", "white", "pink", "purple", "orange", "brown", "gray"]
     }
 
     fashion_styles = []
