@@ -3,7 +3,6 @@ from PIL import Image, ImageOps
 import torch
 import torch.nn.functional as F
 from transformers import AutoProcessor, AutoModel
-import numpy as np
 import plotly.graph_objects as go
 
 st.set_page_config(layout="centered", page_title="Fashion Spectrum", page_icon="👗")
@@ -99,6 +98,11 @@ def display_style_analysis(query_features_centroid):
 
     for category_name, attributes in style_categories.items():
         st.subheader(category_name)
+
+        labels = []
+        scores = []
+
+        # calculate similarity scores
         for attribute in attributes:
             try:
                 attribute_index = fashion_styles.index(attribute)
@@ -111,6 +115,56 @@ def display_style_analysis(query_features_centroid):
             except ValueError:
                 continue
 
+        # create radar chart
+        if len(scores) > 0:
+            # radar chart は閉じる必要がある
+            labels.append(labels[0])
+            scores.append(scores[0])
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Scatterpolar(
+                r=scores,
+                theta=labels,
+                fill='toself'
+            ))
+
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 1]  # cosine similarity 想定
+                    )
+                ),
+                showlegend=False,
+                margin=dict(l=20, r=20, t=20, b=20)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+# def display_style_analysis(query_features_centroid):
+#     """
+#     重心ベクトルに基づいて、スタイルの系統やカラーの分析結果を表示します。
+    
+#     Args:
+#         query_features_centroid (torch.Tensor): 計算された重心ベクトル
+#     """
+#     st.header("Analysis Results (Style, Color, etc.)")
+#     st.write("We analyzed the attributes that describe your uploaded outfits.")
+
+#     for category_name, attributes in style_categories.items():
+#         st.subheader(category_name)
+#         for attribute in attributes:
+#             try:
+#                 attribute_index = fashion_styles.index(attribute)
+#                 similarity_score = F.cosine_similarity(
+#                     query_features_centroid,
+#                     style_features[attribute_index].unsqueeze(0)
+#                 ).item()
+#                 st.write(f"**{attribute}**")
+#                 st.progress(similarity_score)
+#             except ValueError:
+#                 continue
 
 # --- 3. Streamlit アプリケーション本体 ---
 def main():
@@ -142,7 +196,7 @@ def main():
         # 列の数を動的に調整、画像を中央クロップして表示
         for i, uploaded_file in enumerate(uploaded_files):
             image = Image.open(uploaded_file).convert("RGB")
-                # 表示用だけ中央クロップしてサイズ統一（元画像imageは変更しない）
+            # 表示用だけ中央クロップしてサイズ統一（元画像imageは変更しない）
             preview = ImageOps.fit(
                 image,
                 preview_size,
