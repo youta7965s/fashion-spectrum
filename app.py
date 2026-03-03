@@ -1,5 +1,6 @@
 import streamlit as st
 from PIL import Image, ImageOps
+import plotly.graph_objects as go
 
 st.set_page_config(layout="centered", page_title="Fashion Spectrum", page_icon="👗")
 
@@ -30,8 +31,7 @@ def load_resources():
     # スタイル提案用のテキストを定義し、ベクトル化
     # UI表示も英語に統一するため、カテゴリ名は英語に変更
     style_categories = {
-        "Style": ["streetwear", "vintage", "modern", "sporty", "elegant", "preppy", "minimalist", "punk", "gothic", "hippie", "grunge"],
-        "Color": ["red", "blue", "green", "yellow", "black", "white", "pink", "purple", "orange", "brown", "gray"]
+        "Style": ["streetwear", "vintage", "sporty", "elegant", "preppy", "punk", "gothic", "hippie", "grunge", "y2k"]
     }
 
     fashion_styles = []
@@ -94,65 +94,9 @@ def calculate_centroid_vector(uploaded_images, weights, device, processor, model
     return query_features_centroid
 
 
-# def display_style_analysis(query_features_centroid):
-#     """
-#     重心ベクトルに基づいて、スタイルの系統やカラーの分析結果を表示します。
-    
-#     Args:
-#         query_features_centroid (torch.Tensor): 計算された重心ベクトル
-#     """
-#     st.header("Analysis Results (Style, Color, etc.)")
-#     st.write("We analyzed the attributes that describe your uploaded outfits.")
-
-#     for category_name, attributes in style_categories.items():
-#         st.subheader(category_name)
-
-#         labels = []
-#         scores = []
-
-#         # calculate similarity scores
-#         for attribute in attributes:
-#             try:
-#                 attribute_index = fashion_styles.index(attribute)
-#                 similarity_score = F.cosine_similarity(
-#                     query_features_centroid,
-#                     style_features[attribute_index].unsqueeze(0)
-#                 ).item()
-#                 st.write(f"**{attribute}**")
-#                 st.progress(similarity_score)
-#             except ValueError:
-#                 continue
-
-#         # create radar chart
-#         if len(scores) > 0:
-#             # radar chart は閉じる必要がある
-#             labels.append(labels[0])
-#             scores.append(scores[0])
-
-#             fig = go.Figure()
-
-#             fig.add_trace(go.Scatterpolar(
-#                 r=scores,
-#                 theta=labels,
-#                 fill='toself'
-#             ))
-
-#             fig.update_layout(
-#                 polar=dict(
-#                     radialaxis=dict(
-#                         visible=True,
-#                         range=[0, 1]  # cosine similarity 想定
-#                     )
-#                 ),
-#                 showlegend=False,
-#                 margin=dict(l=20, r=20, t=20, b=20)
-#             )
-
-#             st.plotly_chart(fig, use_container_width=True)
-
 def display_style_analysis(query_features_centroid, fashion_styles, style_categories, style_features):
     """
-    重心ベクトルに基づいて、スタイルの系統やカラーの分析結果を表示します。
+    重心ベクトルに基づいて、スタイルの系統やカラーの分析結果をレーダーチャートで表示します。
     
     Args:
         query_features_centroid (torch.Tensor): 計算された重心ベクトル
@@ -160,22 +104,62 @@ def display_style_analysis(query_features_centroid, fashion_styles, style_catego
 
     import torch.nn.functional as F
 
-    st.header("Analysis Results (Style, Color, etc.)")
+    st.header("Analysis Results")
     st.write("We analyzed the attributes that describe your uploaded outfits.")
 
     for category_name, attributes in style_categories.items():
         st.subheader(category_name)
+
+        labels = []
+        scores = []
+
+        # cosine similarity を計算して labels / scores に溜める
         for attribute in attributes:
             try:
                 attribute_index = fashion_styles.index(attribute)
-                similarity_score = F.cosine_similarity(
+
+                sim = F.cosine_similarity(
                     query_features_centroid,
                     style_features[attribute_index].unsqueeze(0)
                 ).item()
-                st.write(f"**{attribute}**")
-                st.progress(similarity_score)
+
+                # [-1, 1] → [0, 1] に正規化（レーダー表示しやすい）
+                sim01 = (sim + 1.0) / 2.0
+
+                labels.append(attribute)
+                scores.append(sim01)
+
             except ValueError:
+                # fashion_styles に無い場合はスキップ
                 continue
+
+        if len(scores) == 0:
+            st.info("No attributes found for this category.")
+            continue
+
+        # radar chart は始点に戻して閉じる必要がある
+        labels_closed = labels + [labels[0]]
+        scores_closed = scores + [scores[0]]
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatterpolar(
+            r=scores_closed,
+            theta=labels_closed,
+            fill='toself'
+        ))
+
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 1]
+                )
+            ),
+            showlegend=False,
+            margin=dict(l=20, r=20, t=20, b=20)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
 # --- 3. Streamlit アプリケーション本体 ---
 def main():
