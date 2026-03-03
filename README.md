@@ -1,4 +1,4 @@
-# Styles Spectrum 🕸️
+# Style Spectrum 🕸️
 
 Discover your own fashion taste.
 

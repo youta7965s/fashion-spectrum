@@ -104,9 +104,6 @@ def display_style_analysis(query_features_centroid, fashion_styles, style_catego
 
     import torch.nn.functional as F
 
-    st.header("Analysis Results")
-    st.write("We analyzed the attributes that describe your uploaded outfits.")
-
     for category_name, attributes in style_categories.items():
         st.subheader(category_name)
 
@@ -167,7 +164,6 @@ def main():
     Streamlitアプリケーションのメイン関数。UIの構築と処理の流れを定義します。
     """
     st.title("Style Spectrum")
-    st.write("Decompose outfit images into attributes such as style, color, and silhouette.")
 
     uploaded_files = st.file_uploader(
         "Upload image(s)...",
@@ -179,7 +175,7 @@ def main():
 
     if uploaded_files:
         st.markdown("---")
-        st.subheader("Uploaded Images & Weighting")
+        st.subheader("Images & Weighting")
 
         query_images = []
         weights = []
@@ -215,7 +211,6 @@ def main():
             weights.append(weight)
 
         # 分析実行ボタン
-        st.markdown("---")
         if st.button("Run analysis"):
             with st.spinner("Loading resources (first time) & analyzing..."):
                 # ここで初回だけロードされる
