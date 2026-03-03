@@ -2,7 +2,7 @@ import streamlit as st
 from PIL import Image, ImageOps
 import plotly.graph_objects as go
 
-st.set_page_config(layout="centered", page_title="Fashion Spectrum", page_icon="👗")
+st.set_page_config(layout="centered", page_title="Style Spectrum", page_icon="🕸️")
 
 # --- 1. モデルとデータの読み込み ---
 # Streamlitのキャッシュ機能を使って、アプリケーションの実行中に一度だけリソースを読み込みます。
@@ -166,13 +166,15 @@ def main():
     """
     Streamlitアプリケーションのメイン関数。UIの構築と処理の流れを定義します。
     """
-    st.title("Fashion Style Spectrum")
+    st.title("Style Spectrum")
     st.write("Decompose outfit images into attributes such as style, color, and silhouette.")
 
     uploaded_files = st.file_uploader(
         "Upload image(s)...",
         type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True
+        accept_multiple_files=True,
+        label_visibility="collapsed",
+        help="Max 5 images. Clear background recommended."
     )
 
     if uploaded_files:

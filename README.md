@@ -1,8 +1,8 @@
-# Fashion Spectrum 👗
+# Styles Spectrum 🕸️
 
 Discover your own fashion taste.
 
-Fashion Spectrum analyzes the images you intuitively like and reveals the underlying style tendencies behind them.
+Style Spectrum analyzes the images you intuitively like and reveals the underlying style tendencies behind them.
 
 ---
 
