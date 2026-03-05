@@ -33,7 +33,19 @@ def load_resources():
 
     # スタイルカテゴリ
     style_categories = {
-        "Style": [
+
+        "Basic Spectrum": [
+            "formal",
+            "classic",
+            "minimalist",
+            "monochrome",
+            "casual",
+            "modern",
+            "detailed",
+            "colorful",
+        ],
+
+        "Culture Spectrum": [
             "streetwear",
             "vintage",
             "sporty",
@@ -44,7 +56,8 @@ def load_resources():
             "hippie",
             "grunge",
             "y2k",
-        ]
+        ], 
+
     }
 
     fashion_styles = []
@@ -290,6 +303,14 @@ def main():
 
         # 外部から渡すmin/max（将来的にDB由来に置き換える）
         attribute_norm_stats = {
+            "formal": {"min": 0.59, "max": 0.64},
+            "classic": {"min": 0.59, "max": 0.64},
+            "minimalist": {"min": 0.59, "max": 0.64},
+            "monochrome": {"min": 0.59, "max": 0.64},
+            "casual": {"min": 0.59, "max": 0.64},
+            "modern": {"min": 0.59, "max": 0.64},
+            "detailed": {"min": 0.59, "max": 0.64},
+            "colorful": {"min": 0.59, "max": 0.64},
             "streetwear": {"min": 0.59, "max": 0.64},
             "vintage": {"min": 0.59, "max": 0.64},
             "sporty": {"min": 0.59, "max": 0.64},
