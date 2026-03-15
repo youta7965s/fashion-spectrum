@@ -34,45 +34,131 @@ def load_resources():
     # スタイルカテゴリ
     style_categories = {
 
-        "Basic": [
-            "formal",
-            "classic",
-            "minimalist",
-            "monochrome",
-            "casual",
-            "modern",
-            "detailed",
-            "colorful",
-        ],
+        "Basic": {
+            "formal": [
+                "formal fashion",
+                "formal outfit",
+                "tailored style",
+            ],
+            "classic": [
+                "classic fashion",
+                "classic outfit",
+                "timeless style",
+            ],
+            "minimalist": [
+                "minimalist fashion",
+                "minimal outfit",
+                "simple clean style",
+            ],
+            "monochrome": [
+                "monochrome fashion",
+                "black and white outfit",
+                "single color style",
+            ],
+            "casual": [
+                "casual fashion",
+                "casual outfit",
+                "everyday relaxed style",
+            ],
+            "modern": [
+                "modern fashion",
+                "modern outfit",
+                "contemporary style",
+            ],
+            "detailed": [
+                "detailed fashion",
+                "decorative outfit",
+                "intricate styling",
+            ],
+            "colorful": [
+                "colorful fashion",
+                "colorful outfit",
+                "vivid colorful style",
+            ],
+        },
 
-        "Culture": [
-            "streetwear",
-            "vintage",
-            "sporty",
-            "elegant",
-            "preppy",
-            "punk",
-            "gothic",
-            "hippie",
-            "grunge",
-            "y2k",
-        ], 
+        "Culture": {
+            "streetwear": [
+                "streetwear",
+                "street wear",
+                "street outfit",
+                "street outfits",
+            ],
+            "vintage": [
+                "vintage fashion",
+                "retro outfit",
+                "vintage outfit",
+            ],
+            "sporty": [
+                "sporty fashion",
+                "sporty outfit",
+                "athletic casual style",
+            ],
+            "elegant": [
+                "elegant fashion",
+                "elegant outfit",
+                "refined graceful style",
+            ],
+            "preppy": [
+                "preppy fashion",
+                "preppy outfit",
+                "ivy league style",
+            ],
+            "punk": [
+                "punk fashion",
+                "punk outfit",
+                "rebellious punk style",
+            ],
+            "gothic": [
+                "gothic fashion",
+                "gothic outfit",
+                "dark gothic style",
+            ],
+            "hippie": [
+                "hippie fashion",
+                "bohemian outfit",
+                "free spirited hippie style",
+            ],
+            "grunge": [
+                "grunge fashion",
+                "grunge outfit",
+                "90s grunge style",
+            ],
+            "y2k": [
+                "y2k fashion",
+                "2000s inspired outfit",
+                "y2k outfit",
+            ],
+        }, 
 
     }
 
     fashion_styles = []
+    attribute_prompt_map = {}
     for category in style_categories.keys():
-        fashion_styles.extend(style_categories[category])
+        for attribute, prompts in style_categories[category].items():
+            fashion_styles.append(attribute)
+            attribute_prompt_map[attribute] = prompts
 
     # テキスト特徴量生成
-    text_inputs = processor(
-        text=fashion_styles,
-        return_tensors="pt",
-        padding=True
-    ).to(device)
+    style_features_list = []
+    for attribute in fashion_styles:
+        text_inputs = processor(
+            text=attribute_prompt_map[attribute],
+            return_tensors="pt",
+            padding=True
+        ).to(device)
 
-    with torch.no_grad():
-        style_features = model.get_text_features(**text_inputs)
+        with torch.no_grad():
+            prompt_features = model.get_text_features(**text_inputs)
+
+        prompt_features = prompt_features / prompt_features.norm(dim=-1, keepdim=True)
+        attribute_feature = prompt_features.mean(dim=0, keepdim=True)
+        attribute_feature = attribute_feature / attribute_feature.norm(dim=-1, keepdim=True)
+
+        style_features_list.append(attribute_feature.squeeze(0))
+
+    style_features = torch.stack(style_features_list)
 
     print("✅ 読み込み完了！")
 
