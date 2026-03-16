@@ -11,6 +11,8 @@ LAION-RVS-Fashion 用の分位点取得プロトタイプ。
 - Basic は対極属性の差分スコアを集計する
 - Culture は各属性の sim01 スコアを集計する
 - attribute_norm_stats にそのまま流し込みやすい JSON を出力する
+- 画像特徴量をキャッシュし、追加読み込み時に重複ダウンロードを避ける
+- 軸定義 JSON が更新されたら、キャッシュ済み画像特徴量から再計算する
 
 出力例
 {
@@ -127,6 +129,11 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def compute_json_hash(payload: dict) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha1(serialized.encode("utf-8")).hexdigest()
+
+
 # --------------------------------------------------
 # メインコード互換の特徴量生成
 # --------------------------------------------------
@@ -190,25 +197,14 @@ def load_resources(style_config, device_arg: Optional[str] = None):
 # --------------------------------------------------
 
 
-def compute_attribute_scores_from_image(
-    image,
-    device,
-    processor,
-    model,
+def compute_attribute_scores_from_feature(
+    image_features,
     fashion_styles,
     style_features,
     style_categories,
     basic_opposite_pairs,
     F,
-    torch,
 ):
-    inputs = processor(images=image, return_tensors="pt").to(device)
-
-    with torch.no_grad():
-        image_features = model.get_image_features(**inputs)
-
-    image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-
     raw_score_map = {}
     for attribute in fashion_styles:
         attribute_index = fashion_styles.index(attribute)
@@ -231,6 +227,37 @@ def compute_attribute_scores_from_image(
         culture_score_map[attribute] = raw_score_map[attribute]
 
     return raw_score_map, basic_diff_score_map, culture_score_map
+
+
+def compute_attribute_scores_from_image(
+    image,
+    device,
+    processor,
+    model,
+    fashion_styles,
+    style_features,
+    style_categories,
+    basic_opposite_pairs,
+    F,
+    torch,
+):
+    inputs = processor(images=image, return_tensors="pt").to(device)
+
+    with torch.no_grad():
+        image_features = model.get_image_features(**inputs)
+
+    image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+
+    raw_score_map, basic_diff_score_map, culture_score_map = compute_attribute_scores_from_feature(
+        image_features=image_features,
+        fashion_styles=fashion_styles,
+        style_features=style_features,
+        style_categories=style_categories,
+        basic_opposite_pairs=basic_opposite_pairs,
+        F=F,
+    )
+
+    return image_features, raw_score_map, basic_diff_score_map, culture_score_map
 
 
 # --------------------------------------------------
@@ -256,6 +283,41 @@ class ImageFetcher:
             return Image.open(io.BytesIO(resp.content)).convert("RGB")
         except (requests.RequestException, UnidentifiedImageError, OSError):
             return None
+
+
+# --------------------------------------------------
+# Feature cache
+# --------------------------------------------------
+
+
+def load_feature_cache(cache_index_path: Path) -> Dict[str, dict]:
+    cache = {}
+    if cache_index_path.exists():
+        with open(cache_index_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                cache[row["id"]] = row
+    return cache
+
+
+def append_feature_cache_record(cache_index_path: Path, record: dict) -> None:
+    with open(cache_index_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def save_feature_array(feature_cache_dir: Path, image_id: str, image_features) -> str:
+    feature_cache_dir.mkdir(parents=True, exist_ok=True)
+    feature_path = feature_cache_dir / f"{image_id}.npy"
+    np.save(feature_path, image_features.detach().cpu().numpy())
+    return str(feature_path)
+
+
+def load_feature_array(feature_path: str, torch, device):
+    arr = np.load(feature_path)
+    return torch.from_numpy(arr).to(device)
 
 
 # --------------------------------------------------
@@ -335,6 +397,7 @@ def main() -> None:
     np.random.seed(args.seed)
 
     style_config = load_style_config(args.config)
+    style_config_hash = compute_json_hash(style_config)
     style_categories = style_config["style_categories"]
     basic_opposite_pairs = style_config["basic_opposite_pairs"]
     lower_percentile = style_config["quantile_settings"]["lower_percentile"]
@@ -349,6 +412,9 @@ def main() -> None:
     data_output_path.parent.mkdir(parents=True, exist_ok=True)
 
     output_attribute_stats_path = output_dir / "attribute_norm_stats_for_app.json"
+    feature_cache_dir = output_dir / "feature_cache"
+    feature_cache_index_path = output_dir / "feature_cache_index.jsonl"
+    cache_state_path = output_dir / "cache_state.json"
 
     (
         device,
@@ -378,6 +444,8 @@ def main() -> None:
         "download_ok": 0,
         "download_failed": 0,
         "scored": 0,
+        "cache_reused": 0,
+        "cache_recomputed": 0,
     }
 
     counts_per_source: Dict[str, int] = defaultdict(int)
@@ -396,64 +464,32 @@ def main() -> None:
         },
     )
 
+    cache_records = load_feature_cache(feature_cache_index_path)
+    previous_cache_state = {}
+    if cache_state_path.exists():
+        with open(cache_state_path, "r", encoding="utf-8") as f:
+            previous_cache_state = json.load(f)
+    previous_style_config_hash = previous_cache_state.get("style_config_hash")
+    needs_rescore = previous_style_config_hash != style_config_hash
+
     failures_fp = (output_dir / "failed_urls.jsonl").open("a", encoding="utf-8")
-    sampled_fp = (output_dir / "sampled_rows.jsonl").open("a", encoding="utf-8")
+    sampled_fp = (output_dir / "sampled_rows.jsonl").open("w", encoding="utf-8")
 
     try:
-        for row in stream_rows(args.split):
-            if stopper.stop_requested or counters["scored"] >= args.max_samples:
-                break
-
-            counters["rows_seen"] += 1
-
-            keep = should_keep_row(
-                row=row,
-                allowed_types=allowed_types,
-                allowed_categories=allowed_categories,
-                max_punsafe=args.max_punsafe,
-                max_pwatermark=args.max_pwatermark,
-                min_width=args.min_width,
-                min_height=args.min_height,
-                dedupe_products=args.dedupe_products,
-                seen_products=seen_products,
-            )
-            if not keep:
+        cached_items = list(cache_records.values())
+        for record in cached_items[:args.max_samples]:
+            feature_path = record.get("feature_path")
+            if not feature_path or not Path(feature_path).exists():
                 continue
 
-            counters["rows_kept"] += 1
-
-            url = row.get("URL")
-            if not url:
-                continue
-
-            image = fetcher.fetch(url)
-            if image is None:
-                counters["download_failed"] += 1
-                failures_fp.write(
-                    json.dumps(
-                        {
-                            "url": url,
-                            "index_src": row.get("INDEX_SRC"),
-                        },
-                        ensure_ascii=False,
-                    ) + "\n"
-                )
-                continue
-
-            counters["download_ok"] += 1
-            counts_per_source[str(row.get("INDEX_SRC", "UNKNOWN"))] += 1
-
-            raw_score_map, basic_diff_score_map, culture_score_map = compute_attribute_scores_from_image(
-                image=image,
-                device=device,
-                processor=processor,
-                model=model,
+            image_features = load_feature_array(feature_path, torch=torch, device=device)
+            raw_score_map, basic_diff_score_map, culture_score_map = compute_attribute_scores_from_feature(
+                image_features=image_features,
                 fashion_styles=fashion_styles,
                 style_features=style_features,
                 style_categories=style_categories,
                 basic_opposite_pairs=basic_opposite_pairs,
                 F=F,
-                torch=torch,
             )
 
             for key, value in basic_diff_score_map.items():
@@ -464,12 +500,12 @@ def main() -> None:
             sampled_fp.write(
                 json.dumps(
                     {
-                        "id": stable_hash(url),
-                        "url": url,
-                        "index_src": row.get("INDEX_SRC"),
-                        "type": row.get("TYPE"),
-                        "category": row.get("CATEGORY"),
-                        "product_id": row.get("PRODUCT_ID"),
+                        "id": record["id"],
+                        "url": record.get("url"),
+                        "index_src": record.get("index_src"),
+                        "type": record.get("type"),
+                        "category": record.get("category"),
+                        "product_id": record.get("product_id"),
                         "scores": {
                             "basic_diff": basic_diff_score_map,
                             "culture": culture_score_map,
@@ -480,35 +516,140 @@ def main() -> None:
             )
 
             counters["scored"] += 1
+            if needs_rescore:
+                counters["cache_recomputed"] += 1
+            else:
+                counters["cache_reused"] += 1
+            counts_per_source[str(record.get("index_src", "UNKNOWN"))] += 1
 
-            if counters["scored"] % args.save_every == 0:
-                quantile_payload = {
-                    key: {
-                        "min": stores[key].summary(lower_percentile, upper_percentile)["min"],
-                        "max": stores[key].summary(lower_percentile, upper_percentile)["max"],
-                    }
-                    for key in all_stat_keys
+        if counters["scored"] < args.max_samples:
+            for row in stream_rows(args.split):
+                if stopper.stop_requested or counters["scored"] >= args.max_samples:
+                    break
+
+                counters["rows_seen"] += 1
+
+                keep = should_keep_row(
+                    row=row,
+                    allowed_types=allowed_types,
+                    allowed_categories=allowed_categories,
+                    max_punsafe=args.max_punsafe,
+                    max_pwatermark=args.max_pwatermark,
+                    min_width=args.min_width,
+                    min_height=args.min_height,
+                    dedupe_products=args.dedupe_products,
+                    seen_products=seen_products,
+                )
+                if not keep:
+                    continue
+
+                counters["rows_kept"] += 1
+
+                url = row.get("URL")
+                if not url:
+                    continue
+
+                image_id = stable_hash(url)
+                if image_id in cache_records:
+                    continue
+
+                image = fetcher.fetch(url)
+                if image is None:
+                    counters["download_failed"] += 1
+                    failures_fp.write(
+                        json.dumps(
+                            {
+                                "url": url,
+                                "index_src": row.get("INDEX_SRC"),
+                            },
+                            ensure_ascii=False,
+                        ) + "\n"
+                    )
+                    continue
+
+                counters["download_ok"] += 1
+                counts_per_source[str(row.get("INDEX_SRC", "UNKNOWN"))] += 1
+
+                image_features, raw_score_map, basic_diff_score_map, culture_score_map = compute_attribute_scores_from_image(
+                    image=image,
+                    device=device,
+                    processor=processor,
+                    model=model,
+                    fashion_styles=fashion_styles,
+                    style_features=style_features,
+                    style_categories=style_categories,
+                    basic_opposite_pairs=basic_opposite_pairs,
+                    F=F,
+                    torch=torch,
+                )
+
+                feature_path = save_feature_array(feature_cache_dir, image_id, image_features)
+                cache_record = {
+                    "id": image_id,
+                    "url": url,
+                    "feature_path": feature_path,
+                    "index_src": row.get("INDEX_SRC"),
+                    "type": row.get("TYPE"),
+                    "category": row.get("CATEGORY"),
+                    "product_id": row.get("PRODUCT_ID"),
                 }
-                write_json(output_attribute_stats_path, quantile_payload)
-                write_json(data_output_path, quantile_payload)
-                write_json(
-                    output_dir / "running_summary.json",
-                    {
-                        "counters": counters,
-                        "attributes": {
-                            key: stores[key].summary(lower_percentile, upper_percentile)
-                            for key in all_stat_keys
+                cache_records[image_id] = cache_record
+                append_feature_cache_record(feature_cache_index_path, cache_record)
+
+                for key, value in basic_diff_score_map.items():
+                    stores[key].update(value)
+                for key, value in culture_score_map.items():
+                    stores[key].update(value)
+
+                sampled_fp.write(
+                    json.dumps(
+                        {
+                            "id": image_id,
+                            "url": url,
+                            "index_src": row.get("INDEX_SRC"),
+                            "type": row.get("TYPE"),
+                            "category": row.get("CATEGORY"),
+                            "product_id": row.get("PRODUCT_ID"),
+                            "scores": {
+                                "basic_diff": basic_diff_score_map,
+                                "culture": culture_score_map,
+                            },
                         },
-                        "counts_per_source_top20": dict(
-                            sorted(counts_per_source.items(), key=lambda kv: kv[1], reverse=True)[:20]
-                        ),
-                        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    },
+                        ensure_ascii=False,
+                    ) + "\n"
                 )
-                log(
-                    f"scored={counters['scored']} rows_seen={counters['rows_seen']} "
-                    f"download_failed={counters['download_failed']}"
-                )
+
+                counters["scored"] += 1
+
+                if counters["scored"] % args.save_every == 0:
+                    quantile_payload = {
+                        key: {
+                            "min": stores[key].summary(lower_percentile, upper_percentile)["min"],
+                            "max": stores[key].summary(lower_percentile, upper_percentile)["max"],
+                        }
+                        for key in all_stat_keys
+                    }
+                    write_json(output_attribute_stats_path, quantile_payload)
+                    write_json(data_output_path, quantile_payload)
+                    write_json(
+                        output_dir / "running_summary.json",
+                        {
+                            "counters": counters,
+                            "attributes": {
+                                key: stores[key].summary(lower_percentile, upper_percentile)
+                                for key in all_stat_keys
+                            },
+                            "counts_per_source_top20": dict(
+                                sorted(counts_per_source.items(), key=lambda kv: kv[1], reverse=True)[:20]
+                            ),
+                            "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "style_config_hash": style_config_hash,
+                        },
+                    )
+                    log(
+                        f"scored={counters['scored']} rows_seen={counters['rows_seen']} "
+                        f"download_failed={counters['download_failed']}"
+                    )
 
         final_attribute_norm_stats = {
             key: {
@@ -527,11 +668,20 @@ def main() -> None:
                 sorted(counts_per_source.items(), key=lambda kv: kv[1], reverse=True)[:50]
             ),
             "finished_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "style_config_hash": style_config_hash,
         }
 
         write_json(output_attribute_stats_path, final_attribute_norm_stats)
         write_json(data_output_path, final_attribute_norm_stats)
         write_json(output_dir / "final_summary.json", final_summary)
+        write_json(
+            cache_state_path,
+            {
+                "style_config_hash": style_config_hash,
+                "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "cached_items": len(cache_records),
+            },
+        )
         log(
             f"Finished. Wrote {data_output_path}, {output_attribute_stats_path}, "
             f"and {output_dir / 'final_summary.json'}"
