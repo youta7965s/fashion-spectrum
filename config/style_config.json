@@ -1,0 +1,109 @@
+{
+  "style_categories": {
+    "Basic": {
+      "formal": [
+        "formal fashion",
+        "formal outfit",
+        "tailored style"
+      ],
+      "classic": [
+        "classic fashion",
+        "classic outfit",
+        "timeless style"
+      ],
+      "minimalist": [
+        "minimalist fashion",
+        "minimal outfit",
+        "simple clean style"
+      ],
+      "monochrome": [
+        "monochrome fashion",
+        "black and white outfit",
+        "single color style"
+      ],
+      "casual": [
+        "casual fashion",
+        "casual outfit",
+        "everyday relaxed style"
+      ],
+      "modern": [
+        "modern fashion",
+        "modern outfit",
+        "contemporary style"
+      ],
+      "detailed": [
+        "detailed fashion",
+        "decorative outfit",
+        "intricate styling"
+      ],
+      "colorful": [
+        "colorful fashion",
+        "colorful outfit",
+        "vivid colorful style"
+      ]
+    },
+    "Culture": {
+      "streetwear": [
+        "streetwear",
+        "street wear",
+        "street outfit",
+        "street outfits"
+      ],
+      "vintage": [
+        "vintage fashion",
+        "retro outfit",
+        "vintage outfit"
+      ],
+      "sporty": [
+        "sporty fashion",
+        "sporty outfit",
+        "athletic casual style"
+      ],
+      "elegant": [
+        "elegant fashion",
+        "elegant outfit",
+        "refined graceful style"
+      ],
+      "preppy": [
+        "preppy fashion",
+        "preppy outfit",
+        "ivy league style"
+      ],
+      "punk": [
+        "punk fashion",
+        "punk outfit",
+        "rebellious punk style"
+      ],
+      "gothic": [
+        "gothic fashion",
+        "gothic outfit",
+        "dark gothic style"
+      ],
+      "hippie": [
+        "hippie fashion",
+        "bohemian outfit",
+        "free spirited hippie style"
+      ],
+      "grunge": [
+        "grunge fashion",
+        "grunge outfit",
+        "90s grunge style"
+      ],
+      "y2k": [
+        "y2k fashion",
+        "2000s inspired outfit",
+        "y2k outfit"
+      ]
+    }
+  },
+  "basic_opposite_pairs": [
+    ["formal", "casual"],
+    ["classic", "modern"],
+    ["colorful", "monochrome"],
+    ["detailed", "minimalist"]
+  ],
+  "quantile_settings": {
+    "lower_percentile": 1.0,
+    "upper_percentile": 99.0
+  }
+}
