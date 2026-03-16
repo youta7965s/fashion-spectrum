@@ -22,3 +22,5 @@ notebooks/
 
 .DS_Store
 Thumbs.db
+
+data/raw_images/
