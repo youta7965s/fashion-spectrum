@@ -27,3 +27,5 @@ data/raw_images/
 scripts/compute_quantiles.py
 scripts/
 outputs/
+config/
+data/

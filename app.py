@@ -1,12 +1,34 @@
 import streamlit as st
 from PIL import Image, ImageOps
 import plotly.graph_objects as go
+import json
+from pathlib import Path
 
 st.set_page_config(
     layout="centered",
     page_title="Style Spectrum",
     page_icon="🕸️"
 )
+
+# --------------------------------------------------
+#  外部JSON読み込み
+# --------------------------------------------------
+
+STYLE_CONFIG_PATH = Path("config/style_config.json")
+ATTRIBUTE_NORM_STATS_PATH = Path("data/attribute_norm_stats_for_app.json")
+
+
+def load_style_config():
+    with open(STYLE_CONFIG_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_attribute_norm_stats():
+    if ATTRIBUTE_NORM_STATS_PATH.exists():
+        with open(ATTRIBUTE_NORM_STATS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
 
 # --------------------------------------------------
 #  モデルとデータの読み込み
@@ -31,107 +53,10 @@ def load_resources():
     processor = CLIPProcessor.from_pretrained(model_name)
     model = CLIPModel.from_pretrained(model_name).to(device)
 
+    style_config = load_style_config()
+
     # スタイルカテゴリ
-    style_categories = {
-
-        "Basic": {
-            "formal": [
-                "formal fashion",
-                "formal outfit",
-                "tailored style",
-            ],
-            "classic": [
-                "classic fashion",
-                "classic outfit",
-                "timeless style",
-            ],
-            "minimalist": [
-                "minimalist fashion",
-                "minimal outfit",
-                "simple clean style",
-            ],
-            "monochrome": [
-                "monochrome fashion",
-                "black and white outfit",
-                "single color style",
-            ],
-            "casual": [
-                "casual fashion",
-                "casual outfit",
-                "everyday relaxed style",
-            ],
-            "modern": [
-                "modern fashion",
-                "modern outfit",
-                "contemporary style",
-            ],
-            "detailed": [
-                "detailed fashion",
-                "decorative outfit",
-                "intricate styling",
-            ],
-            "colorful": [
-                "colorful fashion",
-                "colorful outfit",
-                "vivid colorful style",
-            ],
-        },
-
-        "Culture": {
-            "streetwear": [
-                "streetwear",
-                "street wear",
-                "street outfit",
-                "street outfits",
-            ],
-            "vintage": [
-                "vintage fashion",
-                "retro outfit",
-                "vintage outfit",
-            ],
-            "sporty": [
-                "sporty fashion",
-                "sporty outfit",
-                "athletic casual style",
-            ],
-            "elegant": [
-                "elegant fashion",
-                "elegant outfit",
-                "refined graceful style",
-            ],
-            "preppy": [
-                "preppy fashion",
-                "preppy outfit",
-                "ivy league style",
-            ],
-            "punk": [
-                "punk fashion",
-                "punk outfit",
-                "rebellious punk style",
-            ],
-            "gothic": [
-                "gothic fashion",
-                "gothic outfit",
-                "dark gothic style",
-            ],
-            "hippie": [
-                "hippie fashion",
-                "bohemian outfit",
-                "free spirited hippie style",
-            ],
-            "grunge": [
-                "grunge fashion",
-                "grunge outfit",
-                "90s grunge style",
-            ],
-            "y2k": [
-                "y2k fashion",
-                "2000s inspired outfit",
-                "y2k outfit",
-            ],
-        }, 
-
-    }
+    style_categories = style_config["style_categories"]
 
     fashion_styles = []
     attribute_prompt_map = {}
@@ -265,6 +190,9 @@ def display_style_analysis(
     if attribute_norm_stats is None:
         attribute_norm_stats = {}
 
+    style_config = load_style_config()
+    opposite_pairs = style_config["basic_opposite_pairs"]
+
     for category_name, attributes in style_categories.items():
 
         st.subheader(category_name)
@@ -308,12 +236,6 @@ def display_style_analysis(
                 continue
 
             score_map = dict(zip(labels, raw_scores))
-            opposite_pairs = [
-                ("formal", "casual"),
-                ("classic", "modern"),
-                ("colorful", "monochrome"),
-                ("detailed", "minimalist"),
-            ]
 
             plot_labels = []
             plot_scores = []
@@ -448,23 +370,7 @@ def main():
             weights.append(weight)
 
         # 外部から渡すmin/max（将来的にDB由来に置き換える）
-        attribute_norm_stats = {
-            "formal_vs_casual": {"min": 0.0, "max": 0.05},
-            "classic_vs_modern": {"min": 0.0, "max": 0.05},
-            "colorful_vs_monochrome": {"min": 0.0, "max": 0.05},
-            "detailed_vs_minimalist": {"min": 0.0, "max": 0.05},
-
-            "streetwear": {"min": 0.59, "max": 0.64},
-            "vintage": {"min": 0.59, "max": 0.64},
-            "sporty": {"min": 0.59, "max": 0.64},
-            "elegant": {"min": 0.59, "max": 0.64},
-            "preppy": {"min": 0.59, "max": 0.64},
-            "punk": {"min": 0.59, "max": 0.64},
-            "gothic": {"min": 0.59, "max": 0.64},
-            "hippie": {"min": 0.59, "max": 0.64},
-            "grunge": {"min": 0.59, "max": 0.64},
-            "y2k": {"min": 0.59, "max": 0.64},
-        }
+        attribute_norm_stats = load_attribute_norm_stats()
 
         # 分析実行
         if st.button("Run analysis"):
